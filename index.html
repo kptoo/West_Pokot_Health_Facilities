@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/L.Control.Locate.min.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet-search.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        /* Scrollable Services Popup */
+        .scrollable-services {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 5px;
+            background-color: #f9f9f9;
+        }
+        /* Hollow Ward Boundaries Styling */
+        .hollow-boundaries {
+            fill-opacity: 0;
+            stroke: #00008B; /* Dark Blue for edges */
+            stroke-width: 2.5;
+            pointer-events: none;
+        }
+        /* Custom Blue Triangle Hospital Icons */
+        .leaflet-div-icon {
+            background: none;
+            border: none;
+        }
+        .triangle-icon {
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 12px solid #0000FF; /* Blue fill color */
+        }
+        /* Tooltip Styling */
+        .leaflet-tooltip {
+            background: #ffffff;
+            color: #333;
+            font-size: 10pt;
+            padding: 4px;
+            border: 1px solid #ddd;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        /* Collapsible Legend */
+        .leaflet-control-layers {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        }
+        .legend-header {
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px;
+            text-align: center;
+            background: #f1f1f1;
+            border-bottom: 1px solid #ddd;
+        }
+        .legend-content {
+            display: none;
+            padding: 5px;
+        }
+        </style>
+        <title>Interactive Health Facilities Map</title>
+    </head>
+    <body>
+        <div id="map"></div>
+
+        <!-- Include Libraries -->
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/L.Control.Locate.min.js"></script>
+        <script src="js/leaflet-svg-shape-markers.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="js/leaflet-search.js"></script>
+        <script src="data/WestPokotWardBoundaries_1.js"></script>
+        <script src="data/health_facilities_2.js"></script>
+
+        <script>
+        // Initialize Map
+        var map = L.map('map', { zoomControl: false, maxZoom: 28, minZoom: 8 });
+        L.control.locate({ locateOptions: { maxZoom: 19 } }).addTo(map);
+
+        // Base Layer
+        var layer_OSMStandard = L.tileLayer('http://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            opacity: 0.7,
+            attribution: '&copy; OpenStreetMap contributors'
+        });
+        map.addLayer(layer_OSMStandard);
+
+        // Hollow Ward Boundaries Style
+        function styleWardBoundaries() {
+            return {
+                className: 'hollow-boundaries',
+                color: '#00008B',
+                weight: 2.5,
+                fillOpacity: 0
+            };
+        }
+
+        // Ward Boundaries Layer
+        var wardBoundaries = L.geoJson(json_WestPokotWardBoundaries_1, {
+            style: styleWardBoundaries
+        });
+        map.addLayer(wardBoundaries);
+
+        // Health Facilities Layer
+        function healthFacilityPopup(feature, layer) {
+            var popupContent = '<table>' +
+                '<tr><td><b>Facility:</b></td><td>' + (feature.properties['Facility'] || 'N/A') + '</td></tr>' +
+                '<tr><td><b>Services:</b></td><td class="scrollable-services">' +
+                (feature.properties['Services'] || 'No Services Listed') + '</td></tr>' +
+                '</table>';
+            layer.bindPopup(popupContent, { maxHeight: 300 });
+        }
+
+        function healthFacilityIcon() {
+            return L.divIcon({
+                className: 'leaflet-div-icon',
+                html: '<div class="triangle-icon"></div>',
+                iconSize: [12, 12],
+                iconAnchor: [6, 12],
+                popupAnchor: [0, -12]
+            });
+        }
+
+        var healthFacilities = L.geoJson(json_health_facilities_2, {
+            onEachFeature: healthFacilityPopup,
+            pointToLayer: function(feature, latlng) {
+                return L.marker(latlng, { icon: healthFacilityIcon() });
+            }
+        });
+        map.addLayer(healthFacilities);
+
+        // Collapsible Legend
+        var legendControl = L.control({ position: 'topright' });
+        legendControl.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'leaflet-control-layers');
+            div.innerHTML = '<div class="legend-header">Legend &#9660;</div>' +
+                            '<div class="legend-content">' +
+                            '<p><div class="triangle-icon" style="display: inline-block; margin-right: 5px;"></div> Health Facilities</p>' +
+                            '<p><span style="display: inline-block; width: 12px; height: 12px; border: 2px solid #00008B; border-radius: 50%;"></span> Ward Boundaries</p>' +
+                            '</div>';
+            L.DomEvent.disableClickPropagation(div);
+
+            // Toggle Legend
+            div.querySelector('.legend-header').addEventListener('click', function() {
+                var content = div.querySelector('.legend-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            });
+
+            return div;
+        };
+        legendControl.addTo(map);
+
+        // Measurement Tool
+        var measureControl = new L.Control.Measure({ position: 'topleft' });
+        measureControl.addTo(map);
+
+        // Search Control
+        var searchControl = new L.Control.Search({
+            layer: healthFacilities,
+            propertyName: 'Facility',
+            marker: false,
+            moveToLocation: function(latlng, title, map) {
+                map.setView(latlng, 17);
+            }
+        });
+        searchControl.addTo(map);
+
+        // Fit Bounds
+        var boundsGroup = L.featureGroup([wardBoundaries, healthFacilities]);
+        map.fitBounds(boundsGroup.getBounds());
+        </script>
+    </body>
+</html>
